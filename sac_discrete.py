@@ -6,7 +6,7 @@ import torch as th
 from torch.nn import functional as F
 
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
-
+from .policy import MlpPolicy
 
 class DiscreteSAC(OffPolicyAlgorithm):
   """
@@ -99,12 +99,14 @@ class DiscreteSAC(OffPolicyAlgorithm):
     for gradient_step in range(gradient_steps):
       # Sample replay buffer
       replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
-      actions_pi, log_prob = self.actor.action_log_prob(replay_data.observations)
     
       ent_coef_loss = None
       if self.ent_coef_optimizer is not None:
         ent_coef = th.exp(self.log_ent_coef.detach())
-        ent_coef_loss = -(self.log_ent_coef * (log_prob + self.target_entropy).detach()).mean()
+        with torch.no_grad():
+          entropy = self.actor.get_distribution(replay_data.observations).entropy()
+        
+        ent_coef_loss = -(self.log_ent_coef * (-entropy + self.target_entropy).detach()).mean()
         ent_coef_losses.append(ent_coef_loss.item())
       else:
         ent_coef = self.ent_coef_tensor
@@ -116,6 +118,8 @@ class DiscreteSAC(OffPolicyAlgorithm):
         ent_coef_loss.backward()
         self.ent_coef_optimizer.step()
         
+      actions_pi, log_prob = self.actor.action_log_prob(replay_data.observations)
+
       with th.no_grad():
         # Select action according to policy
         next_actions, next_log_prob = self.actor.action_log_prob(replay_data.next_observations)
