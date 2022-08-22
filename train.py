@@ -1,7 +1,7 @@
 import gym
 import numpy as np  
 
-from sac_discrete import DiscreteSAC
+from algs.sac_discrete import DiscreteSAC
 from parse_args import parse_args
 
 args = parse_args()
