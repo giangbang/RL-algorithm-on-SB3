@@ -196,7 +196,6 @@ class DiscreteSACPolicy(BasePolicy):
 
   def make_actor(self, features_extractor: Optional[BaseFeaturesExtractor] = None) -> DiscreteActor:
     actor_kwargs = self._update_features_extractor(self.net_args, features_extractor)
-    print(actor_kwargs)
     return DiscreteActor(**actor_kwargs).to(self.device)
 
   def make_critic(self, features_extractor: Optional[BaseFeaturesExtractor] = None) -> TwinDelayedQNetworks:
