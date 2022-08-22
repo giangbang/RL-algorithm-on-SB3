@@ -132,7 +132,6 @@ class DiscreteActor(BasePolicy):
 
   def get_distribution(self, obs: th.Tensor) -> Distribution:
     logits = self(obs)
-
     return self._get_distribution_from_logit(logits)
 
   def _predict(self, observation: th.Tensor, deterministic: bool = False) -> th.Tensor:

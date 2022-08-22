@@ -87,7 +87,7 @@ class DiscreteSAC(OffPolicyAlgorithm):
     # Target entropy is used when learning the entropy coefficient
     if self.target_entropy == "auto":
       # automatically set target entropy if needed
-      self.target_entropy = float(0.05)
+      self.target_entropy = np.log(self.env.action_space.n)/5
     else:
       # Force conversion
       # this will also throw an error for unexpected string

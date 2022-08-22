@@ -2,8 +2,19 @@ import gym
 import numpy as np  
 
 from sac_discrete import DiscreteSAC
+from parse_args import parse_args
 
-env = gym.make("FrozenLake-v1")
+args = parse_args()
+env = gym.make(args.env_name)
 
-model = DiscreteSAC("MlpPolicy", env, verbose=1, learning_rate=1e-2)
-model.learn(total_timesteps=1000, log_interval=20)
+model = DiscreteSAC("MlpPolicy",
+    env, verbose=1, learning_rate=args.learning_rate,
+    buffer_size=args.buffer_size,
+    learning_starts=args.learning_starts,
+    batch_size=args.batch_size,
+    tau = args.tau,
+    gamma=args.gamma,
+    train_freq=args.train_freq,
+    gradient_steps=args.gradient_steps)
+model.learn(total_timesteps=args.total_timesteps, 
+    log_interval=10)
