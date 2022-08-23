@@ -25,7 +25,8 @@ class TwinDelayedQNetworks(BasePolicy):
         self,
         observation_space: gym.spaces.Space,
         action_space: gym.spaces.Space,
-        lr_schedule: Schedule,
+        features_extractor: nn.Module,
+        features_dim: int,
         net_arch: Optional[List[int]] = None,
         activation_fn: Type[nn.Module] = nn.ReLU,
         normalize_images: bool = True,
@@ -33,6 +34,8 @@ class TwinDelayedQNetworks(BasePolicy):
         super().__init__(
             observation_space,
             action_space,
+            normalize_images=normalize_images,
+            features_extractor=features_extractor,
         )
 
         self.net_arch = net_arch
@@ -45,7 +48,8 @@ class TwinDelayedQNetworks(BasePolicy):
             "net_arch": self.net_arch,
             "activation_fn": self.activation_fn,
             "normalize_images": normalize_images,
-            "lr_schedule": lr_schedule,
+            "features_extractor": features_extractor,
+            "features_dim": features_dim,
         }
 
         self.q1_net, self.q2_net = None, None
@@ -91,7 +95,6 @@ class DiscreteActor(BasePolicy):
         net_arch: List[int],
         features_extractor: nn.Module,
         features_dim: int,
-        lr_schedule: Schedule,
         activation_fn: Type[nn.Module] = nn.ReLU,
         normalize_images: bool = True,
     ):
@@ -219,7 +222,9 @@ class DiscreteSACPolicy(BasePolicy):
     def make_critic(
         self, features_extractor: Optional[BaseFeaturesExtractor] = None
     ) -> TwinDelayedQNetworks:
-        # critic_kwargs = self._update_features_extractor(self.net_args, features_extractor)
+        critic_kwargs = self._update_features_extractor(
+            self.net_args, features_extractor
+        )
         return TwinDelayedQNetworks(**self.net_args).to(self.device)
 
     def _predict(
