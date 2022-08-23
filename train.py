@@ -3,6 +3,7 @@ import numpy as np
 
 from algs.sac_discrete import DiscreteSAC
 from parse_args import parse_args
+from stable_baselines3.common.logger import configure
 
 args = parse_args()
 env = gym.make(args.env_name)
@@ -16,5 +17,8 @@ model = DiscreteSAC("MlpPolicy",
     gamma=args.gamma,
     train_freq=args.train_freq,
     gradient_steps=args.gradient_steps)
+new_logger = configure('./', ["stdout", "csv"])
+model.set_logger(new_logger)
+
 model.learn(total_timesteps=args.total_timesteps, 
     log_interval=10)

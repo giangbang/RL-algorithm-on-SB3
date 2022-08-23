@@ -5,7 +5,7 @@ import torch as th
 from torch import nn
 from torch.nn import functional as F
 from algs.sac_discrete.policies import DiscreteActor, TwinDelayedQNetworks
-from stable_baselines3.sac.policies import Actor
+from stable_baselines3.sac.policies import Actor as ContinuousActor
 from stable_baselines3.common.policies import BasePolicy, ContinuousCritic, BaseModel
 
 
@@ -68,6 +68,13 @@ class TwinDelayedContinuousQNetworks(BaseModel):
         
         
 class DistralBasePolicies(BasePolicy):
+    """
+    This implementation uses a actor critic architecture for learning Distral
+    Which is mainly based on the Discrete SAC
+    Actor Critic approach has an advantage is that it avoids calculating the 
+    softmax distribution over the Q function, which can cause instability 
+    when the values of Q function become too large 
+    """
     def __init__(
         self,
         observation_space: gym.spaces.Space,
@@ -106,34 +113,19 @@ class DistralBasePolicies(BasePolicy):
             "normalize_images": normalize_images,
         }
         self.actors, self.critics = None, None
+        self.pi0, self.pi0_optim = None, None
+        self.actors_optims, self.critics_optims = None, None
         
         self._build(lr_schedule)
         
     def _build(self, lr_schedule: Schedule):
         self._build_actor_critic()
         self._build_optims()
-        
-    def _build_list_module(self, module_cls: BasePolicy, 
-            args: Optional[Dict[str, Any]], n_module: int,
-            features_extractor: Optional[BaseFeaturesExtractor] = None):
-        args = self._update_features_extractor(args, features_extractor)
-        return [module_cls(**args) for _ in range(n_module)]
-        
-    def _build_list_optimizer(self, optimizer_class: Type[th.optim.Optimizer],
-            optimizer_kwargs: Optional[Dict[str, Any]], 
-            parameters,
-            lr_schedule
-    ):
-        optims = []
-        for params in parameters:
-            optims.append(optimizer_class(params, lr=lr_schedule(1), **optimizer_kwargs))
-        return optims
-        
-class DiscreteDistral(DistralBasePolicies):
-    def _build(self, lr_schedule: Schedule):
-        self.actors = self._build_list_module(DiscreteActor, self.net_args, self.n_envs)
-        self.critics = self._build_list_module(TwinDelayedQNetworks, self.net_args, self.n_envs)
-        
+
+    def _build_actor_critic(self):
+        pass 
+
+    def _build_optims(self):
         actor_params = [list(actor.parameters()) for actor in self.actors]
         critic_params = [list(critic.critic.parameters()) for critic in self.critics]
         
@@ -144,3 +136,48 @@ class DiscreteDistral(DistralBasePolicies):
         self.critics_optims = self._build_list_optimizer(
             self.optimizer_class, self.optimizer_kwargs, critic_params, lr_schedule
         )
+
+        self.pi0_optim = self.optimizer_class(
+            self.pi0.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs
+        )
+        
+    def _build_list_module(self, module_cls: BasePolicy, 
+            args: Optional[Dict[str, Any]], n_module: int,
+            features_extractor: Optional[BaseFeaturesExtractor] = None):
+        args = self._update_features_extractor(args, features_extractor)
+        return [module_cls(**args) for _ in range(n_module)]
+        
+    def _build_list_optimizer(self, optimizer_class: Type[th.optim.Optimizer],
+            optimizer_kwargs: Optional[Dict[str, Any]], 
+            parameters, lr_schedule
+    ):
+        optims = []
+        for params in parameters:
+            optims.append(optimizer_class(params, lr=lr_schedule(1), **optimizer_kwargs))
+        return optims
+
+    def _predict(self, observation: th.Tensor, deterministic: bool = False) -> th.Tensor:
+        actions = []
+        for ob, actor in zip(observation, self.actors):
+            action = actor(ob.unsqueeze(0), deterministic)
+        actions = th.cat(actions, dim=0)
+        return actions
+
+    def forward(self, observation: th.Tensor, deterministic: bool = False) -> th.Tensor:
+        return self._predict(observation, deterministic)
+
+    def action_log_prob(self, i_task: int, observation: th.Tensor, deterministic: bool = False) -> th.Tensor:
+        return self.actors[i_task].action_log_prob(observation, deterministic)
+
+
+class DiscreteDistral(DistralBasePolicies):
+    def _build_actor_critic(self, lr_schedule: Schedule):
+        self.actors = self._build_list_module(DiscreteActor, self.net_args, self.n_envs)
+        self.critics = self._build_list_module(TwinDelayedQNetworks, self.net_args, self.n_envs)
+        self.pi0 = DiscreteActor(**self.net_args)
+
+class ContinuousDistral(DistralBasePolicies):
+    def _build_actor_critic(self, lr_schedule: Schedule):
+        self.actors = self._build_list_module(ContinuousActor, self.net_args, self.n_envs)
+        self.critics = self._build_list_module(TwinDelayedContinuousQNetworks, self.net_args, self.n_envs)
+        self.pi0 = ContinuousActor(**self.net_args)

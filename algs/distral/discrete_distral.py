@@ -6,8 +6,8 @@ import torch as th
 from torch.nn import functional as F
 
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
-
-
+from .policies import DiscreteDistral
+from .MultitaskReplayBuffer import MultitaskReplayBuffer
 
 
 class BaseDistral(OffPolicyAlgorithm):
@@ -30,7 +30,7 @@ class BaseDistral(OffPolicyAlgorithm):
         beta: float  = 0.5, # Hyper params of Distral
         train_freq: Union[int, Tuple[int, str]] = 1,
         gradient_steps: int = 1,
-        replay_buffer_class: Optional[ReplayBuffer] = None,
+        replay_buffer_class: Optional[ReplayBuffer] = MultitaskReplayBuffer,
         replay_buffer_kwargs: Optional[Dict[str, Any]] = None,
         optimize_memory_usage: bool = False,
         target_update_interval: int = 1,
@@ -71,4 +71,45 @@ class BaseDistral(OffPolicyAlgorithm):
         
         if _init_setup_model:
             self._setup_model()
+
+    def _create_aliases(self) -> None:
+        self.actor = self.policy.actors
+        self.critic = self.policy.critics
+        
+class DiscreteDistral(BaseDistral):
+
+    policy_aliases: Dict[str, Type[BasePolicy]] = {
+        "MlpPolicy": DiscreteDistral,
+    }
+
+    def __init__(self, *args, **kwargs):
+        kwargs.update(supported_action_spaces=(gym.spaces.Discrete))
+        super().__init__(self, *args, **kwargs)
+
+    def _setup_model(self) -> None:
+        super()._setup_model()
+        self._create_aliases()
+
+    def train(self, gradient_steps: int, batch_size: int = 64) -> None:
+        self.policy.set_training_mode(True)
+
+        # Update optimizers learning rate
+        optimizers = self.policy.actors_optims + self.policy.critics_optims
+
+        # Update learning rate according to lr schedule
+        self._update_learning_rate(optimizers)
+
+        for gradient_step in range(gradient_steps):
+            # Sample replay buffer
+            replay_data = self.replay_buffer.sample(
+                batch_size, env=self._vec_normalize_env
+            )
+
+            # Update pi0
+
+            _, log_pi0 = self.policy.pi0.
+
+
+
+
         
