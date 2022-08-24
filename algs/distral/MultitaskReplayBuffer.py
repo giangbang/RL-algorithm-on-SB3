@@ -5,6 +5,7 @@ import numpy as np
 import torch as th
 
 from stable_baselines3.common.buffers import ReplayBuffer
+from stable_baselines3.common.vec_env import VecNormalize
 
 class MultitaskReplayBufferSamples(NamedTuple):
     observations: th.Tensor
@@ -15,10 +16,10 @@ class MultitaskReplayBufferSamples(NamedTuple):
     env_indices: th.Tensor
 
 class MultitaskReplayBuffer(ReplayBuffer):
-	def _get_samples(self, batch_inds: np.ndarray, 
-		env: Optional[VecNormalize] = None
-	) -> MultitaskReplayBufferSamples:
-		# Sample randomly the env idx
+    def _get_samples(self, batch_inds: np.ndarray, 
+        env: Optional[VecNormalize] = None
+    ) -> MultitaskReplayBufferSamples:
+        # Sample randomly the env idx
         env_indices = np.random.randint(0, high=self.n_envs, size=(1,))
 
         if self.optimize_memory_usage:

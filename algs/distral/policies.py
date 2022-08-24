@@ -7,7 +7,12 @@ from torch.nn import functional as F
 from algs.sac_discrete.policies import DiscreteActor, TwinDelayedQNetworks
 from stable_baselines3.sac.policies import Actor as ContinuousActor
 from stable_baselines3.common.policies import BasePolicy, ContinuousCritic, BaseModel
+from stable_baselines3.common.type_aliases import Schedule
 
+from stable_baselines3.common.torch_layers import (
+    BaseFeaturesExtractor,
+    FlattenExtractor,
+)
 
 class TwinDelayedContinuousQNetworks(BasePolicy):
     """
@@ -38,7 +43,7 @@ class TwinDelayedContinuousQNetworks(BasePolicy):
         self.net_args = {
             "observation_space": self.observation_space,
             "action_space": self.action_space,
-            "net_arch": actor_arch,
+            "net_arch": net_arch,
             "activation_fn": self.activation_fn,
             "normalize_images": normalize_images,
         }
@@ -129,12 +134,12 @@ class DistralBasePolicies(BasePolicy):
         
     def _build(self, lr_schedule: Schedule):
         self._build_actor_critic()
-        self._build_optims()
+        self._build_optims(lr_schedule)
 
     def _build_actor_critic(self):
         pass 
 
-    def _build_optims(self):
+    def _build_optims(self, lr_schedule: Schedule):
         actor_params = [list(actor.parameters()) for actor in self.actors]
         critic_params = [list(critic.critic.parameters()) for critic in self.critics]
         

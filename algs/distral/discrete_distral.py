@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, Optional, Tuple, Type, Union
 
 import gym
 import numpy as np
@@ -6,8 +6,12 @@ import torch as th
 from torch.nn import functional as F
 
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
-from .policies import DiscreteDistral
+from .policies import DiscreteDistral, DistralBasePolicies
 from .MultitaskReplayBuffer import MultitaskReplayBuffer
+from stable_baselines3.common.utils import polyak_update
+from stable_baselines3.common.type_aliases import GymEnv, Schedule
+from stable_baselines3.common.buffers import ReplayBuffer
+from stable_baselines3.common.policies import BasePolicy
 
 
 class BaseDistral(OffPolicyAlgorithm):
@@ -21,7 +25,7 @@ class BaseDistral(OffPolicyAlgorithm):
     
     def __init__(
         self,
-        policy: Union[str, Type[DiscreteSACPolicy]],
+        policy: Union[str, Type[DistralBasePolicies]],
         env: Union[GymEnv, str],
         learning_rate: Union[float, Schedule] = 3e-4,
         buffer_size: int = 1_000_000,  # 1e6
@@ -43,14 +47,14 @@ class BaseDistral(OffPolicyAlgorithm):
         verbose: int = 0,
         seed: Optional[int] = None,
         device: Union[th.device, str] = "auto",
-        supported_action_spaces: gym.spaces: None,
+        supported_action_spaces: gym.spaces= None,
         _init_setup_model: bool = True,
     ):
         distral_args = {"alpha": alpha, "beta": beta}
         if policy_kwargs is None:
             policy_kwargs = distral_args
         else:
-            assert isintance(policy_kwargs, Dict)
+            assert isinstance(policy_kwargs, Dict)
             policy_kwargs.update(distral_args)
         
         super().__init__(
@@ -120,7 +124,7 @@ class DiscreteDistral(BaseDistral):
 
             # Update pi0
             probs_pi0, _ = self.policy.pi0.action_log_prob(replay_data.observations, False)
-            with torch.no_grad():
+            with th.no_grad():
                 probs_pi, _  = self.actor.action_log_prob(replay_data.env_indices, 
                     replay_data.observations, False)
 
@@ -134,7 +138,7 @@ class DiscreteDistral(BaseDistral):
             self.policy.pi0_optim.step()
 
             # Update value function of tasks
-            with torch.no_grad():
+            with th.no_grad():
                 # Compute the next Q values: min over all critics targets
                 next_q_values = self.critic_target_task(replay_data.env_indices, replay_data.next_observations)
                 next_q_values = th.minimum(*next_q_values)

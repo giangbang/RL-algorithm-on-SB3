@@ -4,8 +4,8 @@ import numpy as np
 from algs.distral import DiscreteDistral
 from parse_args import parse_args
 from stable_baselines3.common.logger import configure
-from get_multitask import envs_name
-from stable_baselines3.common.utils import DummyVecEnv
+from get_multi_envs import envs_name
+from stable_baselines3.common.vec_env import DummyVecEnv
 from algs.distral.callbacks import LogRewardSeperateEnvs
 
 args = parse_args()

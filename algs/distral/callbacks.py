@@ -19,7 +19,7 @@ class LogRewardSeperateEnvs(BaseCallback):
         dones = locals['dones']
         for idx, done in enumerate(dones):
             if done:
-                self.cnt_episode[inx] += 1
-                self.logger.record_mean(f'Task reward {indx}', self.total_rewards[indx])
-                self.total_rewards[indx] = 0
+                self.cnt_episode[idx] += 1
+                self.logger.record_mean(f'Task reward {idx}', self.total_rewards[indx])
+                self.total_rewards[idx] = 0
         return True
