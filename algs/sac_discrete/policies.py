@@ -135,6 +135,13 @@ class DiscreteActor(BasePolicy):
 
         logits = self.action_net(latent_pi)
         return logits
+        
+    def _logits(self, obs: th.Tensor) -> th.Tensor:
+        features = self.extract_features(obs)
+        latent_pi = self.pi(features)
+
+        logits = self.action_net(latent_pi)
+        return logits
 
     def _get_distribution_from_logit(self, logits: th.Tensor) -> Distribution:
         return self.action_dist.proba_distribution(action_logits=logits)
@@ -150,11 +157,15 @@ class DiscreteActor(BasePolicy):
             deterministic=deterministic
         )
 
-    def action_log_prob(self, obs: th.Tensor) -> th.Tensor:
+    def action_log_prob(self, obs: th.Tensor, return_ent=True) -> th.Tensor:
         logits = self(obs)
         probs = F.softmax(logits, dim=1)
+        if not return_ent:
+            ent = None
+        else: 
+            ent = self._get_distribution_from_logit(logits).entropy()
 
-        return probs, self._get_distribution_from_logit(logits).entropy()
+        return probs, ent
 
 
 class DiscreteSACPolicy(BasePolicy):

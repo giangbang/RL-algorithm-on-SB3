@@ -9,7 +9,7 @@ from stable_baselines3.sac.policies import Actor as ContinuousActor
 from stable_baselines3.common.policies import BasePolicy, ContinuousCritic, BaseModel
 
 
-class TwinDelayedContinuousQNetworks(BaseModel):
+class TwinDelayedContinuousQNetworks(BasePolicy):
     """
     Twin delayed continuous Q networks for continuous action space
     """
@@ -43,7 +43,13 @@ class TwinDelayedContinuousQNetworks(BaseModel):
             "normalize_images": normalize_images,
         }
         self.critic, self.critic_target = None, None
+    
+    def critic_target_parameters(self):
+        return self.critic_target.parameters()
         
+    def critic_online_parameters(self):
+        return self.critic.parameters()
+    
     def _build(self) -> None:
         self.critic = self.make_critic()
         self.critic_target = self.make_critic()
@@ -64,7 +70,7 @@ class TwinDelayedContinuousQNetworks(BaseModel):
         :param obs: Observation
         :return: The estimated Q-Value for each action.
         """
-        return self.critic(self.extract_features(obs))
+        return self.critic(obs)
         
         
 class DistralBasePolicies(BasePolicy):
@@ -88,7 +94,8 @@ class DistralBasePolicies(BasePolicy):
         normalize_images: bool = True,
         optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
         optimizer_kwargs: Optional[Dict[str, Any]] = None,
-        
+        alpha: float = 0.5,
+        beta: float = 0.5
     ):
         super().__init__(
             observation_space,
@@ -105,6 +112,8 @@ class DistralBasePolicies(BasePolicy):
         self.net_arch = net_arch
         self.activation_fn = activation_fn
         self.n_envs = n_envs
+        self.alpha = alpha
+        self.beta = beta
         self.net_args = {
             "observation_space": self.observation_space,
             "action_space": self.action_space,
@@ -141,6 +150,10 @@ class DistralBasePolicies(BasePolicy):
             self.pi0.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs
         )
         
+        self.h0_optim = self.optimizer_class(
+            self.h0.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs
+        )
+        
     def _build_list_module(self, module_cls: BasePolicy, 
             args: Optional[Dict[str, Any]], n_module: int,
             features_extractor: Optional[BaseFeaturesExtractor] = None):
@@ -156,25 +169,41 @@ class DistralBasePolicies(BasePolicy):
             optims.append(optimizer_class(params, lr=lr_schedule(1), **optimizer_kwargs))
         return optims
 
-    def _predict(self, observation: th.Tensor, deterministic: bool = False) -> th.Tensor:
-        actions = []
-        for ob, actor in zip(observation, self.actors):
-            action = actor(ob.unsqueeze(0), deterministic)
-        actions = th.cat(actions, dim=0)
-        return actions
-
     def forward(self, observation: th.Tensor, deterministic: bool = False) -> th.Tensor:
         return self._predict(observation, deterministic)
 
-    def action_log_prob(self, i_task: int, observation: th.Tensor, deterministic: bool = False) -> th.Tensor:
-        return self.actors[i_task].action_log_prob(observation, deterministic)
+    def action_log_prob(self, 
+            i_task: int, 
+            observation: th.Tensor,
+            return_ent: bool = True) -> th.Tensor:
+        return self.actors[i_task].action_log_prob(observation, return_ent)
 
+    def critic_target_task(self, i_task: int, observation: th.Tensor) -> th.Tensor:
+        return self.critics[i_task].critic_target(observation)
+        
+    def critic_task(self, i_task: int, observation: th.Tensor) -> th.Tensor:
+        return self.critics[i_task].critic(observation)
 
 class DiscreteDistral(DistralBasePolicies):
     def _build_actor_critic(self, lr_schedule: Schedule):
         self.actors = self._build_list_module(DiscreteActor, self.net_args, self.n_envs)
         self.critics = self._build_list_module(TwinDelayedQNetworks, self.net_args, self.n_envs)
         self.pi0 = DiscreteActor(**self.net_args)
+        self.h0  = TwinDelayedQNetworks(**self.net_args)
+        
+    def _predict(self, observation: th.Tensor, deterministic: bool = False) -> th.Tensor:
+        actions = []
+        for obs, actor in zip(observation, self.actors):
+            obs = obs.reshape(1, -1)
+            action_logits_pi = actor._logits(obs)
+            action_logits_pi0 = self.pi0._logits(obs)
+            action_logits = self.beta*action_logits_pi + self.alpha*action_logits_pi0
+            action = actor._get_distribution_from_logit(action_logits).get_actions(
+                deterministic=deterministic
+            )
+            actions.append(action)
+        actions = th.cat(actions, dim=0)
+        return actions
 
 class ContinuousDistral(DistralBasePolicies):
     def _build_actor_critic(self, lr_schedule: Schedule):

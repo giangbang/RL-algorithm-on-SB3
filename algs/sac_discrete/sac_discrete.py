@@ -191,7 +191,7 @@ class DiscreteSAC(OffPolicyAlgorithm):
 
             # Get current Q-values estimates for each critic network
             # using action from the replay buffer
-            current_q_values = self.critic.critic_online(replay_data.observations)
+            current_q_values = self.critic(replay_data.observations)
             current_q_values = [
                 current_q.gather(1, replay_data.actions)
                 for current_q in current_q_values

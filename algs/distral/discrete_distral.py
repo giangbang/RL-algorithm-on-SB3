@@ -14,6 +14,9 @@ class BaseDistral(OffPolicyAlgorithm):
     """
     Base class for Distral 
     Paper: https://arxiv.org/abs/1707.04175
+    This implementation is different from what presented in the paper
+    we use an actor critic architecture to avoid calculating the softmax 
+    of the Q function, which can be unstable when Q values are large
     """
     
     def __init__(
@@ -43,6 +46,13 @@ class BaseDistral(OffPolicyAlgorithm):
         supported_action_spaces: gym.spaces: None,
         _init_setup_model: bool = True,
     ):
+        distral_args = {"alpha": alpha, "beta": beta}
+        if policy_kwargs is None:
+            policy_kwargs = distral_args
+        else:
+            assert isintance(policy_kwargs, Dict)
+            policy_kwargs.update(distral_args)
+        
         super().__init__(
             policy,
             env,
@@ -73,8 +83,8 @@ class BaseDistral(OffPolicyAlgorithm):
             self._setup_model()
 
     def _create_aliases(self) -> None:
-        self.actor = self.policy.actors
-        self.critic = self.policy.critics
+        self.actor = self.policy
+        self.critic = self.policy
         
 class DiscreteDistral(BaseDistral):
 
@@ -85,6 +95,7 @@ class DiscreteDistral(BaseDistral):
     def __init__(self, *args, **kwargs):
         kwargs.update(supported_action_spaces=(gym.spaces.Discrete))
         super().__init__(self, *args, **kwargs)
+        self.epsilon_in_log = 1e-6
 
     def _setup_model(self) -> None:
         super()._setup_model()
@@ -98,6 +109,8 @@ class DiscreteDistral(BaseDistral):
 
         # Update learning rate according to lr schedule
         self._update_learning_rate(optimizers)
+        
+        critic_losses, actor_losses = [], []
 
         for gradient_step in range(gradient_steps):
             # Sample replay buffer
@@ -106,10 +119,87 @@ class DiscreteDistral(BaseDistral):
             )
 
             # Update pi0
+            probs_pi0, _ = self.policy.pi0.action_log_prob(replay_data.observations, False)
+            with torch.no_grad():
+                probs_pi, _  = self.actor.action_log_prob(replay_data.env_indices, 
+                    replay_data.observations, False)
 
-            _, log_pi0 = self.policy.pi0.
+            log_probs_pi0 = th.log(probs_pi0 + self.epsilon_in_log)
+            cross_entropy = (log_probs_pi0*probs_pi).sum(dim=1, keepdims=True)
+            cross_entropy = self.alpha / self.beta * cross_entropy
+            pi0_loss = -cross_entropy.mean()
 
+            self.policy.pi0_optim.zero_grad()
+            pi0_loss.backward()
+            self.policy.pi0_optim.step()
 
+            # Update value function of tasks
+            with torch.no_grad():
+                # Compute the next Q values: min over all critics targets
+                next_q_values = self.critic_target_task(replay_data.env_indices, replay_data.next_observations)
+                next_q_values = th.minimum(*next_q_values)
+                
+                next_probs_pi, next_entropy = self.action_log_prob(
+                    replay_data.env_indices, replay_data.next_observations
+                )
+                
+                next_prob_pi0, _ = self.policy.pi0.action_log_prob(replay_data.next_observations, False)
+                next_log_prob_pi0 = th.log(next_prob_pi0 + self.epsilon_in_log)
+                next_cross_ent = (next_log_prob_pi0 * next_probs_pi).sum(dim=1, keepdims=True)
+                next_q_values = (
+                    (next_q_values*next_probs_pi).sum(dim=1, keepdims=True) +\
+                    self.alpha/self.beta*next_cross_ent + \
+                    1/self.beta*next_entropy.reshape(-1, 1)
+                )
+                
+                target_q_values = (
+                    replay_data.rewards 
+                    + (1 - replay_data.dones) * self.gamma * next_q_values
+                )
+                
+            current_q_values = self.critic.critic_task(replay_data.env_indices, replay_data.observations)
+            current_q_values = [
+                current_q.gather(1, replay_data.actions)
+                for current_q in current_q_values
+            ]
+            
+            # Compute critic loss
+            critic_loss = 0.5 * sum(
+                F.mse_loss(current_q, target_q_values) for current_q in current_q_values
+            )
+            critic_losses.append(critic_loss.item())
 
+            # Optimize the critic
+            self.critic.critics_optims[replay_data.env_indices].zero_grad()
+            critic_loss.backward()
+            self.critic.critics_optims[replay_data.env_indices].step()
 
-        
+            # Compute actor loss
+            probs, entropy = self.actor.action_log_prob(replay_data.env_indices, replay_data.observations)
+
+            q_values_pi = self.critic.critic_task(replay_data.env_indices, replay_data.observations)
+            min_q_values = th.minimum(*q_values_pi)
+            actor_loss = (probs * min_q_values).sum(
+                dim=1, keepdims=True
+            ) + 1 * entropy.reshape(-1, 1) # entropy coeficient is 1, since we only want to project the softmax of Q to an other actor
+            actor_loss = -actor_loss.mean()
+
+            # Optimize the actor
+            self.actor.actors_optims[replay_data.env_indices].zero_grad()
+            actor_loss.backward()
+            self.actor.actors_optims[replay_data.env_indices].step()
+            actor_losses.append(actor_loss.item())
+
+            # Update target networks
+            if gradient_step % self.target_update_interval == 0:
+                polyak_update(
+                    self.critic.critics[replay_data.env_indices].critic_online_parameters(),
+                    self.critic.critics[replay_data.env_indices].critic_target_parameters(),
+                    self.tau,
+                )
+        self._n_updates += gradient_steps
+
+        self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
+        self.logger.record("train/actor_loss", np.mean(actor_losses))
+        self.logger.record("train/critic_loss", np.mean(critic_losses))
+       
