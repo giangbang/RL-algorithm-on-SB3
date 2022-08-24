@@ -3,7 +3,6 @@ from typing import Any, Dict, List, Optional, Type, Union
 import gym
 import torch as th
 from torch import nn
-from torch.nn import functional as F
 from algs.sac_discrete.policies import DiscreteActor, TwinDelayedQNetworks
 from stable_baselines3.sac.policies import Actor as ContinuousActor
 from stable_baselines3.common.policies import BasePolicy, ContinuousCritic, BaseModel
@@ -25,7 +24,6 @@ class TwinDelayedContinuousQNetworks(BasePolicy):
         net_arch: List[int],
         features_extractor: nn.Module,
         features_dim: int,
-        lr_schedule: Schedule,
         activation_fn: Type[nn.Module] = nn.ReLU,
         normalize_images: bool = True,
     ):
@@ -76,8 +74,14 @@ class TwinDelayedContinuousQNetworks(BasePolicy):
         :return: The estimated Q-Value for each action.
         """
         return self.critic(obs)
-        
-        
+
+import inspect
+def filter_dict(dict_to_filter, thing_with_kwargs):
+    sig = inspect.signature(thing_with_kwargs)
+    filter_keys = [param.name for param in sig.parameters.values() if param.kind == param.POSITIONAL_OR_KEYWORD]
+    filtered_dict = {filter_key:dict_to_filter[filter_key] for filter_key in filter_keys}
+    return filtered_dict
+
 class DistralBasePolicies(BasePolicy):
     """
     This implementation uses a actor critic architecture for learning Distral
@@ -100,7 +104,7 @@ class DistralBasePolicies(BasePolicy):
         optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
         optimizer_kwargs: Optional[Dict[str, Any]] = None,
         alpha: float = 0.5,
-        beta: float = 0.5
+        beta: float = 0.5,
     ):
         super().__init__(
             observation_space,
@@ -163,6 +167,7 @@ class DistralBasePolicies(BasePolicy):
             args: Optional[Dict[str, Any]], n_module: int,
             features_extractor: Optional[BaseFeaturesExtractor] = None):
         args = self._update_features_extractor(args, features_extractor)
+        args = filter_dict(args, module_cls)
         return [module_cls(**args) for _ in range(n_module)]
         
     def _build_list_optimizer(self, optimizer_class: Type[th.optim.Optimizer],
@@ -189,8 +194,8 @@ class DistralBasePolicies(BasePolicy):
     def critic_task(self, i_task: int, observation: th.Tensor) -> th.Tensor:
         return self.critics[i_task].critic(observation)
 
-class DiscreteDistral(DistralBasePolicies):
-    def _build_actor_critic(self, lr_schedule: Schedule):
+class DiscreteDistralPolicy(DistralBasePolicies):
+    def _build_actor_critic(self):
         self.actors = self._build_list_module(DiscreteActor, self.net_args, self.n_envs)
         self.critics = self._build_list_module(TwinDelayedQNetworks, self.net_args, self.n_envs)
         self.pi0 = DiscreteActor(**self.net_args)
@@ -211,7 +216,7 @@ class DiscreteDistral(DistralBasePolicies):
         return actions
 
 class ContinuousDistral(DistralBasePolicies):
-    def _build_actor_critic(self, lr_schedule: Schedule):
+    def _build_actor_critic(self):
         self.actors = self._build_list_module(ContinuousActor, self.net_args, self.n_envs)
         self.critics = self._build_list_module(TwinDelayedContinuousQNetworks, self.net_args, self.n_envs)
         self.pi0 = ContinuousActor(**self.net_args)

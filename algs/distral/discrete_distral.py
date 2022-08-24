@@ -6,7 +6,7 @@ import torch as th
 from torch.nn import functional as F
 
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
-from .policies import DiscreteDistral, DistralBasePolicies
+from .policies import DiscreteDistralPolicy, DistralBasePolicies
 from .MultitaskReplayBuffer import MultitaskReplayBuffer
 from stable_baselines3.common.utils import polyak_update
 from stable_baselines3.common.type_aliases import GymEnv, Schedule
@@ -56,7 +56,9 @@ class BaseDistral(OffPolicyAlgorithm):
         else:
             assert isinstance(policy_kwargs, Dict)
             policy_kwargs.update(distral_args)
-        
+
+        self.n_envs = env.num_envs
+        policy_kwargs.update(n_envs=self.n_envs)
         super().__init__(
             policy,
             env,
@@ -78,8 +80,9 @@ class BaseDistral(OffPolicyAlgorithm):
             seed=seed,
             supported_action_spaces=supported_action_spaces,
             support_multi_env=True,
+            sde_support=False,
         )
-        
+
         self.alpha = alpha
         self.beta = beta
         
@@ -89,16 +92,17 @@ class BaseDistral(OffPolicyAlgorithm):
     def _create_aliases(self) -> None:
         self.actor = self.policy
         self.critic = self.policy
-        
+
+
 class DiscreteDistral(BaseDistral):
 
     policy_aliases: Dict[str, Type[BasePolicy]] = {
-        "MlpPolicy": DiscreteDistral,
+        "MlpPolicy": DiscreteDistralPolicy,
     }
 
     def __init__(self, *args, **kwargs):
         kwargs.update(supported_action_spaces=(gym.spaces.Discrete))
-        super().__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.epsilon_in_log = 1e-6
 
     def _setup_model(self) -> None:

@@ -25,7 +25,7 @@ class TwinDelayedQNetworks(BasePolicy):
         self,
         observation_space: gym.spaces.Space,
         action_space: gym.spaces.Space,
-        features_extractor: nn.Module,
+        features_extractor_class: nn.Module,
         features_dim: int,
         net_arch: Optional[List[int]] = None,
         activation_fn: Type[nn.Module] = nn.ReLU,
@@ -35,7 +35,7 @@ class TwinDelayedQNetworks(BasePolicy):
             observation_space,
             action_space,
             normalize_images=normalize_images,
-            features_extractor=features_extractor,
+            features_extractor_class=features_extractor_class,
         )
 
         self.net_arch = net_arch
@@ -48,7 +48,7 @@ class TwinDelayedQNetworks(BasePolicy):
             "net_arch": self.net_arch,
             "activation_fn": self.activation_fn,
             "normalize_images": normalize_images,
-            "features_extractor": features_extractor,
+            "features_extractor_class": features_extractor_class,
             "features_dim": features_dim,
         }
 
@@ -97,6 +97,7 @@ class DiscreteActor(BasePolicy):
         features_dim: int,
         activation_fn: Type[nn.Module] = nn.ReLU,
         normalize_images: bool = True,
+        *args, **kwargs
     ):
         super().__init__(
             observation_space,
