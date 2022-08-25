@@ -24,19 +24,19 @@ UP = 2
 LEFT = 3
 RIGHT = 0
 
+
 class GridworldEnv(gym.Env):
-    
-    metadata = {'render.modes': ['human','rgb_array']}
+    metadata = {'render.modes': ['human', 'rgb_array']}
     num_env = 0
 
-    def __init__(self, plan, max_step=100):
+    def __init__(self, plan):
         super().__init__()
         self.plan = plan
 
-        self.max_step = max_step
+        self.max_step = 10000000
         self.actions = [NOOP, UP, DOWN, LEFT, RIGHT]
         self.inv_actions = [0, 2, 1, 4, 3]
-        self.action_space = spaces.Discrete(4) # Only consider 4 action, exclude NOOP
+        self.action_space = spaces.Discrete(4)  # Only consider 4 action, exclude NOOP
         self.action_pos_dict = {NOOP: [0, 0], UP: [-1, 0], DOWN: [1, 0], LEFT: [0, -1], RIGHT: [0, 1]}
 
         self.img_shape = [800, 800, 3]  # visualize state
@@ -47,8 +47,8 @@ class GridworldEnv(gym.Env):
         self.start_grid_map = self._read_grid_map(self.grid_map_path)  # initial grid map
         self.current_grid_map = copy.deepcopy(self.start_grid_map)  # current grid map
         self.grid_map_shape = self.start_grid_map.shape
-        self.observation_space = spaces.Box(low=np.array([0., 0.]) , \
-                                            high = np.array([ 1.0, 1.0])  )
+        self.observation_space = spaces.Box(low=np.array([0., 0.]),
+                                            high=np.array([1.0, 1.0]))
 
         # agent state: start, target, current state
         self.agent_start_state, self.agent_target_state = self._get_agent_start_target_state()
@@ -58,7 +58,7 @@ class GridworldEnv(gym.Env):
 
         # set other parameters
         self.restart_once_done = False  # restart or not once done
-       
+
         # set seed
         self.seed()
 
@@ -67,34 +67,34 @@ class GridworldEnv(gym.Env):
 
         # consider viewer for compatibility with gym
         self.viewer = None
-        
+
         # counter for time step
         self.time = 0
-        
+
         self.penalty_step = 0.1
         self.penalty_wall = 0.5
-        
+
         self.optimal_reward = None
         # calculate the length of shortest path from start to goal
         # self.shortest_path_length = self._find_shortest_path_length_start_goal()
         # print('Length of shortest path:', self.shortest_path_length)
 
-    def seed( self, seed = None):
+    def seed(self, seed=None):
 
         # Fix seed for reproducibility
 
         self.np_random, seed = seeding.np_random(seed)
-        return [seed]    
+        return [seed]
 
-    def get_state ( self , coordinates, action, reward ) :
+    def get_state(self, coordinates, action, reward):
 
         # Return a tuple with: current location of the agent in the map
         # given coordinates
 
-        ## Normalized for better perform of the NN
+        # Normalized for better perform of the NN
 
-        return np.asarray([ coordinates[0] / self.grid_map_shape[0], 
-                            coordinates[1] / self.grid_map_shape[1]] )
+        return np.asarray([coordinates[0] / self.grid_map_shape[0],
+                           coordinates[1] / self.grid_map_shape[1]])
 
     def step(self, action):
         # Wrapper for step method, used to terminate the episode when
@@ -115,26 +115,26 @@ class GridworldEnv(gym.Env):
         info = {'success': False}
         done = False
 
-        #Penalties
+        # Penalties
         penalty_step = self.penalty_step
         penalty_wall = self.penalty_wall
 
-        reward = -penalty_step 
+        reward = -penalty_step
         nxt_agent_state = (self.agent_state[0] + self.action_pos_dict[action][0],
                            self.agent_state[1] + self.action_pos_dict[action][1])
 
         if action == NOOP:
             info['success'] = True
-            self.episode_total_reward += reward #Update total reward
+            self.episode_total_reward += reward  # Update total reward
             return self.get_state(self.agent_state, action, reward), reward, False, info
 
-        #Make a step
+        # Make a step
         next_state_out_of_map = (nxt_agent_state[0] < 0 or nxt_agent_state[0] >= self.grid_map_shape[0]) or \
                                 (nxt_agent_state[1] < 0 or nxt_agent_state[1] >= self.grid_map_shape[1])
 
         if next_state_out_of_map:
             info['success'] = False
-            self.episode_total_reward += reward #Update total reward
+            self.episode_total_reward += reward  # Update total reward
             return self.get_state(self.agent_state, action, reward), reward, False, info
 
         # successful behavior
@@ -147,8 +147,8 @@ class GridworldEnv(gym.Env):
         elif target_position == WALL:
 
             info['success'] = False
-            self.episode_total_reward += (reward-penalty_wall) #Update total reward
-            return self.get_state(self.agent_state, action, reward-penalty_wall), (reward-penalty_wall), False, info
+            self.episode_total_reward += (reward - penalty_wall)  # Update total reward
+            return self.get_state(self.agent_state, action, reward - penalty_wall), (reward - penalty_wall), False, info
 
         elif target_position == TARGET:
 
@@ -168,7 +168,7 @@ class GridworldEnv(gym.Env):
             if self.restart_once_done:
                 self.reset()
 
-        self.episode_total_reward += reward #Update total reward
+        self.episode_total_reward += reward  # Update total reward
         return self.get_state(self.agent_state, action, reward), reward, done, info
 
     def reset(self):
@@ -176,10 +176,10 @@ class GridworldEnv(gym.Env):
         # Return the initial state of the environment
 
         self.agent_state = copy.deepcopy(self.agent_start_state)
-        if self.agent_state is None: # Random start
+        if self.agent_state is None:  # Random start
             self.agent_state = self._place_agent()
             # self.shortest_path_length = self._find_shortest_path_length_start_goal()
-            
+
         self.current_grid_map = copy.deepcopy(self.start_grid_map)
         self.episode_total_reward = 0.0
         self.time = 0
@@ -209,12 +209,12 @@ class GridworldEnv(gym.Env):
     def _get_agent_start_target_state(self):
         start_state = np.where(self.start_grid_map == AGENT)
         target_state = np.where(self.start_grid_map == TARGET)
-        
+
         if not target_state[0]:
             sys.exit('Target state not specified')
-        
+
         target_state = (target_state[0][0], target_state[1][0])
-        
+
         if not start_state[0]:
             # print('Start state not found, generate random start at each episode')
             return None, target_state
@@ -228,7 +228,7 @@ class GridworldEnv(gym.Env):
 
         if img_shape is None:
             img_shape = self.img_shape
-        observation = np.zeros(img_shape, dtype=float) 
+        observation = np.zeros(img_shape, dtype=float)
         gs0 = int(observation.shape[0] / self.current_grid_map.shape[0])
         gs1 = int(observation.shape[1] / self.current_grid_map.shape[1])
         for i in range(self.current_grid_map.shape[0]):
@@ -236,14 +236,15 @@ class GridworldEnv(gym.Env):
                 for k in range(3):
                     this_value = COLORS[self.current_grid_map[i, j]][k]
                     observation[i * gs0:(i + 1) * gs0, j * gs1:(j + 1) * gs1, k] = this_value
-        return (255*observation).astype(np.uint8)
+        return (255 * observation).astype(np.uint8)
 
-    def render(self, mode='human',close = False):
+    def render(self, mode='human', close=False):
+        """
+        Returns a visualization of the environment according to specification
+        """
 
-        # Returns a visualization of the environment according to specification
-
-        if close: 
-            plt.close(1) #Final plot
+        if close:
+            plt.close(1)  # Final plot
             return
 
         img = self._gridmap_to_image()
@@ -253,32 +254,32 @@ class GridworldEnv(gym.Env):
             plt.figure()
             plt.imshow(img)
             return
-    
+
     def get_reward_on_reaching_goal(self):
         return 1.0 + self.penalty_step * np.sum(self.grid_map_shape) * 2
-    
+
     def get_optimal_reward(self):
-        '''
+        """
         Get the expected optimal reward
-        '''
+        """
         ret = []
         for state in self._get_all__empty_coord():
             shortest = self._find_shortest_path_length_start_goal(state)
             rw = self.get_reward_on_reaching_goal() - shortest * self.penalty_step
             if shortest < 0:
-                ret.append(-self.penalty_step*(self.max_step + 1))
-            else :
+                ret.append(-self.penalty_step * (self.max_step + 1))
+            else:
                 ret.append(rw)
-            
+
         return ret
-    
+
     def _get_all__empty_coord(self):
         for y in range(self.grid_map_shape[0]):
             for x in range(self.grid_map_shape[1]):
                 coord = y, x
                 if self.start_grid_map[coord] == EMPTY:
                     yield coord
-    
+
     def _place_agent(self):
         '''
         Randomly find an empty space to place agent
@@ -292,7 +293,7 @@ class GridworldEnv(gym.Env):
             n_trial -= 1
         print('Cannot find a valid starting position!')
         return None
-        
+
     def _additional_check_start_position(self, plan: int, state: np.ndarray):
         '''
         For some specific environments, there are some additional requirements
@@ -302,24 +303,22 @@ class GridworldEnv(gym.Env):
             return state[1] < 7
         elif plan == 21:
             return state[1] > 7
-        return True    
-        
-    
+        return True
+
     def _check_valid(self, coord):
-        '''
-        Given a coordinate, return True if this coordinate is inside the map 
+        """
+        Given a coordinate, return True if this coordinate is inside the map
         or not a wall, i.e it is a valid coordinate that agent can take
-        '''
+        """
         next_state_out_of_map = (coord[0] < 0 or coord[0] >= self.grid_map_shape[0]) or \
                                 (coord[1] < 0 or coord[1] >= self.grid_map_shape[1])
-        
+
         if next_state_out_of_map: return False
         if self.current_grid_map[coord[0], coord[1]] == WALL: return False
         return True
-        
-    
+
     def _find_shortest_path_length_start_goal(self, start=None):
-        '''
+        """
         Return the length of the shortest path from start to goal,
         this function is used to assign reward for reaching goal
         since when the map is too large and the path to goal is too long,
@@ -331,34 +330,35 @@ class GridworldEnv(gym.Env):
         Params:
             start: starting position, if None, the starting position
             will be chosen to be the agent starting position
-        '''
+        """
         from queue import Queue
         if start is None:
             start = copy.deepcopy(self.agent_state)
-        
+
         q = Queue()
         q.put(start)
-        
+
         visit = np.zeros(self.grid_map_shape, dtype=bool)
         visit[start] = True
-        
+
         shortest_length = 0
         actions = np.array(list(self.action_pos_dict.values()), dtype=int)
-        
+
         while not q.empty():
             for _ in range(q.qsize()):
                 node = q.get()
-                
+
                 if node == self.agent_target_state:
                     return shortest_length
-                
+
                 for action in actions:
                     neighbor_node = tuple(action + node)
-                    
+
                     if not self._check_valid(neighbor_node): continue
                     if visit[neighbor_node]: continue
-                    
-                    visit[neighbor_node] = True; q.put(neighbor_node)
-                    
+
+                    visit[neighbor_node] = True;
+                    q.put(neighbor_node)
+
             shortest_length += 1
         return -1
