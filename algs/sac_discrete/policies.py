@@ -3,7 +3,6 @@ from typing import Any, Dict, List, Optional, Type, Union
 import gym
 import torch as th
 from torch import nn
-from torch.nn import functional as F
 from common.policies import DiscreteTwinDelayedDoubleQNetworks, DiscreteActor
 from stable_baselines3.common.type_aliases import Schedule
 

@@ -67,6 +67,7 @@ class DistralBasePolicies(BasePolicy):
             "net_arch": net_arch,
             "activation_fn": self.activation_fn,
             "normalize_images": normalize_images,
+            "features_extractor_class": features_extractor_class
         }
         self.actors, self.critics = None, None
         self.pi0, self.pi0_optim = None, None
@@ -83,7 +84,7 @@ class DistralBasePolicies(BasePolicy):
 
     def _build_optims(self, lr_schedule: Schedule):
         actor_params = [list(actor.parameters()) for actor in self.actors]
-        critic_params = [list(critic.critic.parameters()) for critic in self.critics]
+        critic_params = [list(critic.critic_parameters()) for critic in self.critics]
         
         self.actors_optims = self._build_list_optimizer(
             self.optimizer_class, self.optimizer_kwargs, actor_params, lr_schedule
@@ -102,8 +103,7 @@ class DistralBasePolicies(BasePolicy):
         )
         
     def _build_list_module(self, module_cls: BasePolicy, 
-            args: Optional[Dict[str, Any]], n_module: int,
-            features_extractor: Optional[BaseFeaturesExtractor] = None):
+            args: Optional[Dict[str, Any]], n_module: int,) -> List[BasePolicy]:
         return [module_cls(**args) for _ in range(n_module)]
         
     def _build_list_optimizer(self, optimizer_class: Type[th.optim.Optimizer],
@@ -141,8 +141,8 @@ class DiscreteDistralPolicy(DistralBasePolicies):
         actions = []
         for obs, actor in zip(observation, self.actors):
             obs = obs.reshape(1, -1)
-            action_logits_pi = actor._logits(obs)
-            action_logits_pi0 = self.pi0._logits(obs)
+            action_logits_pi = actor.logits(obs)
+            action_logits_pi0 = self.pi0.logits(obs)
             action_logits = self.beta*action_logits_pi + self.alpha*action_logits_pi0
             action = actor._get_distribution_from_logit(action_logits).get_actions(
                 deterministic=deterministic

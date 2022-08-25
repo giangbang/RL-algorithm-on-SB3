@@ -3,7 +3,7 @@ For simplicity in the implementation, we do not allow (or take into consideratio
 of feature extractors between policies and Q networks, algorithms that do require the 
 sharing extractors (for example, CARE) should maintain its own extractor in its respective algorithm class
 """
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union, Tuple
 
 import gym
 import torch as th
@@ -11,32 +11,30 @@ from torch import nn
 from torch.nn import functional as F
 
 from stable_baselines3.dqn.policies import DQNPolicy
-
-from stable_baselines3.common.policies import BasePolicy
 from stable_baselines3.common.distributions import (
     Distribution,
     CategoricalDistribution,
     make_proba_distribution,
 )
+from stable_baselines3.common.utils import get_schedule_fn
 from stable_baselines3.common.policies import BasePolicy, ContinuousCritic, BaseModel
 from stable_baselines3.common.torch_layers import (
     BaseFeaturesExtractor,
     FlattenExtractor,
     create_mlp,
 )
-from stable_baselines3.common.type_aliases import Schedule
 
 
 class DiscretePolicy(BasePolicy):
     def __init__(
-        self,
-        observation_space: gym.spaces.Space,
-        action_space: gym.spaces.Space,
-        net_arch: List[int],
-        features_extractor: nn.Module,
-        features_dim: int,
-        activation_fn: Type[nn.Module] = nn.ReLU,
-        normalize_images: bool = True,
+            self,
+            observation_space: gym.spaces.Space,
+            action_space: gym.spaces.Space,
+            net_arch: List[int],
+            features_extractor: nn.Module,
+            features_dim: int,
+            activation_fn: Type[nn.Module] = nn.ReLU,
+            normalize_images: bool = True,
     ):
         super().__init__(
             observation_space,
@@ -44,7 +42,7 @@ class DiscretePolicy(BasePolicy):
             features_extractor=features_extractor,
             normalize_images=normalize_images,
         )
-        assert isinstance(net_arch, List)
+        assert isinstance(net_arch, list)
 
         self.net_arch = net_arch
         self.features_extractor = features_extractor
@@ -75,8 +73,8 @@ class DiscretePolicy(BasePolicy):
 
         logits = self.action_net(latent_pi)
         return logits
-        
-    def _logits(self, obs: th.Tensor) -> th.Tensor:
+
+    def logits(self, obs: th.Tensor) -> th.Tensor:
         features = self.extract_features(obs)
         latent_pi = self.pi(features)
 
@@ -91,7 +89,7 @@ class DiscretePolicy(BasePolicy):
         return self._get_distribution_from_logit(logits)
 
     def _predict(
-        self, observation: th.Tensor, deterministic: bool = False
+            self, observation: th.Tensor, deterministic: bool = False
     ) -> th.Tensor:
         return self.get_distribution(observation).get_actions(
             deterministic=deterministic
@@ -102,24 +100,26 @@ class DiscretePolicy(BasePolicy):
         probs = F.softmax(logits, dim=1)
         if not return_ent:
             ent = None
-        else: 
+        else:
             ent = self._get_distribution_from_logit(logits).entropy()
 
         return probs, ent
+
 
 class DiscreteActor(BasePolicy):
     """
     Wrapper class for discrete actor
     """
+
     def __init__(
-        self,
-        observation_space: gym.spaces.Space,
-        action_space: gym.spaces.Space,
-        features_extractor_class: nn.Module,
-        features_extractor_kwargs: Optional[Dict[str, Any]] = None,
-        net_arch: Optional[List[int]] = None,
-        activation_fn: Type[nn.Module] = nn.ReLU,
-        normalize_images: bool = True,
+            self,
+            observation_space: gym.spaces.Space,
+            action_space: gym.spaces.Space,
+            features_extractor_class: nn.Module,
+            features_extractor_kwargs: Optional[Dict[str, Any]] = None,
+            net_arch: Optional[List[int]] = None,
+            activation_fn: Type[nn.Module] = nn.ReLU,
+            normalize_images: bool = True,
     ):
         super().__init__(
             observation_space,
@@ -136,40 +136,48 @@ class DiscreteActor(BasePolicy):
             "activation_fn": self.activation_fn,
             "normalize_images": normalize_images,
         }
-        
+
         self.policy = None
         self._build()
-        
+
     def _build(self):
         policy_args = self._update_features_extractor(self.net_args)
         self.policy = DiscretePolicy(**policy_args)
-        
+
     def _predict(
-        self, observation: th.Tensor, deterministic: bool = False
+            self, observation: th.Tensor, deterministic: bool = False
     ) -> th.Tensor:
         return self.policy._predict(observation, deterministic)
-        
+
+    def forward(self, observation: th.Tensor):
+        return self._predict(observation)
+
     def logits(self, obs: th.Tensor) -> th.Tensor:
-        logits = self.policy._logits(obs)
+        logits = self.policy.logits(obs)
         return logits
-        
+
     def action_log_prob(self, obs: th.Tensor, return_ent=True) -> th.Tensor:
         return self.policy.action_log_prob(obs, return_ent)
-    
+
+    def _get_distribution_from_logit(self, logits: th.Tensor) -> Distribution:
+        return self.policy._get_distribution_from_logit(logits)
+
+
 class DiscreteTwinDelayedDoubleQNetworks(BasePolicy):
     """
     Double Q Network with delayed target networks
     with total of four Q Networks at its core
     """
+
     def __init__(
-        self,
-        observation_space: gym.spaces.Space,
-        action_space: gym.spaces.Space,
-        features_extractor_class: nn.Module,
-        features_extractor_kwargs: Optional[Dict[str, Any]] = None,
-        net_arch: Optional[List[int]] = None,
-        activation_fn: Type[nn.Module] = nn.ReLU,
-        normalize_images: bool = True,
+            self,
+            observation_space: gym.spaces.Space,
+            action_space: gym.spaces.Space,
+            features_extractor_class: nn.Module,
+            features_extractor_kwargs: Optional[Dict[str, Any]] = None,
+            net_arch: Optional[List[int]] = None,
+            activation_fn: Type[nn.Module] = nn.ReLU,
+            normalize_images: bool = True,
     ):
         super().__init__(
             observation_space,
@@ -191,6 +199,7 @@ class DiscreteTwinDelayedDoubleQNetworks(BasePolicy):
             "normalize_images": normalize_images,
             "features_extractor_class": features_extractor_class,
             "features_extractor_kwargs": features_extractor_kwargs,
+            "lr_schedule": get_schedule_fn(1), # dummy learning schedule, do not matter
         }
 
         self.q1_net, self.q2_net = None, None
@@ -206,16 +215,16 @@ class DiscreteTwinDelayedDoubleQNetworks(BasePolicy):
         dqn_net.optimizer = None
         return dqn_net
 
-    def forward(self, obs: th.Tensor) -> th.Tensor:
+    def forward(self, obs: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
         return self.q1_net.q_net(obs), self.q2_net.q_net(obs)
 
-    def _predict(self, obs: th.Tensor) -> th.Tensor:
+    def _predict(self, obs: th.Tensor, deterministic: bool = True) -> Tuple[th.Tensor, th.Tensor]:
         return th.minimum(*self.forward(obs))
 
-    def critic_target(self, obs: th.Tensor) -> th.Tensor:
+    def critic_target(self, obs: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
         return self.q1_net.q_net_target(obs), self.q2_net.q_net_target(obs)
 
-    def critic(self, obs: th.Tensor) -> th.Tensor:
+    def critic(self, obs: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
         return self.q1_net.q_net(obs), self.q2_net.q_net(obs)
 
     def critic_target_parameters(self):
@@ -235,20 +244,22 @@ class DiscreteTwinDelayedDoubleQNetworks(BasePolicy):
         return list(self.q1_net.q_net.parameters()) + list(
             self.q2_net.q_net.parameters()
         )
-        
+
+
 class ContinuousTwinDelayedDoubleQNetworks(BasePolicy):
     """
     Twin delayed Double Q networks for continuous action space
     """
+
     def __init__(
-        self,
-        observation_space: gym.spaces.Space,
-        action_space: gym.spaces.Space,
-        features_extractor_class: nn.Module,
-        features_extractor_kwargs: Optional[Dict[str, Any]] = None,
-        net_arch: Optional[List[int]] = None,
-        activation_fn: Type[nn.Module] = nn.ReLU,
-        normalize_images: bool = True,
+            self,
+            observation_space: gym.spaces.Space,
+            action_space: gym.spaces.Space,
+            features_extractor_class: nn.Module,
+            features_extractor_kwargs: Optional[Dict[str, Any]] = None,
+            net_arch: Optional[List[int]] = None,
+            activation_fn: Type[nn.Module] = nn.ReLU,
+            normalize_images: bool = True,
     ):
         super().__init__(
             observation_space,
@@ -271,11 +282,11 @@ class ContinuousTwinDelayedDoubleQNetworks(BasePolicy):
             "features_extractor_class": features_extractor_class,
             "features_extractor_kwargs": features_extractor_kwargs,
         }
-        
+
         self.critic, self.target_critic = None, None
-        
+
         self._build()
-        
+
     def _build(self) -> None:
         self.critic = self.make_critic()
         self.critic_target = self.make_critic()
@@ -283,17 +294,17 @@ class ContinuousTwinDelayedDoubleQNetworks(BasePolicy):
 
         # Target networks should always be in eval mode
         self.critic_target.set_training_mode(False)
-        
+
     def make_critic(self, features_extractor: Optional[BaseFeaturesExtractor] = None) -> ContinuousCritic:
         critic_kwargs = self._update_features_extractor(self.net_args, features_extractor)
         return ContinuousCritic(**critic_kwargs).to(self.device)
 
     def critic_target_parameters(self):
         return self.critic_target.parameters()
-        
+
     def critic_parameters(self):
         return self.critic.parameters()
-        
+
     def forward(self, obs: th.Tensor) -> th.Tensor:
         """
         Predict the q-values.

@@ -14,7 +14,7 @@ class MultitaskReplayBufferSamples(NamedTuple):
     next_observations: th.Tensor
     dones: th.Tensor
     rewards: th.Tensor
-    env_indices: np.ndarray
+    env_indices: int
 
 
 class MultitaskReplayBuffer(ReplayBuffer):
@@ -43,4 +43,4 @@ class MultitaskReplayBuffer(ReplayBuffer):
             (self.dones[batch_inds, env_indices] * (1 - self.timeouts[batch_inds, env_indices])).reshape(-1, 1),
             self._normalize_reward(self.rewards[batch_inds, env_indices].reshape(-1, 1), env),
         )
-        return MultitaskReplayBufferSamples(*tuple(map(self.to_torch, data)), env_indices.reshape(-1))
+        return MultitaskReplayBufferSamples(*tuple(map(self.to_torch, data)), env_indices.item())

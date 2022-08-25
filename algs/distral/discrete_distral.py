@@ -10,7 +10,6 @@ from .policies import DiscreteDistralPolicy, DistralBasePolicies
 from common.buffers import MultitaskReplayBuffer
 from stable_baselines3.common.utils import polyak_update
 from stable_baselines3.common.type_aliases import GymEnv, Schedule
-from stable_baselines3.common.buffers import ReplayBuffer
 from stable_baselines3.common.policies import BasePolicy
 
 
@@ -62,14 +61,14 @@ class BaseDistral(OffPolicyAlgorithm):
         super().__init__(
             policy,
             env,
-            learning_rate,
-            buffer_size,
-            learning_starts,
-            batch_size,
-            tau,
-            gamma,
-            train_freq,
-            gradient_steps,
+            learning_rate=learning_rate,
+            buffer_size=buffer_size,
+            learning_starts=learning_starts,
+            batch_size=batch_size,
+            tau=tau,
+            gamma=gamma,
+            train_freq=train_freq,
+            gradient_steps=gradient_steps,
             replay_buffer_class=replay_buffer_class,
             replay_buffer_kwargs=replay_buffer_kwargs,
             policy_kwargs=policy_kwargs,
@@ -203,7 +202,7 @@ class DiscreteDistral(BaseDistral):
             # Update target networks
             if gradient_step % self.target_update_interval == 0:
                 polyak_update(
-                    self.critic.critics[replay_data.env_indices].critic_online_parameters(),
+                    self.critic.critics[replay_data.env_indices].critic_parameters(),
                     self.critic.critics[replay_data.env_indices].critic_target_parameters(),
                     self.tau,
                 )
