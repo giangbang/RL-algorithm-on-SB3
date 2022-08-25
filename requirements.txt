@@ -1,1 +1,2 @@
 stable-baselines3>=1.6.0
+git+https://github.com/denisyarats/dmc2gym.git

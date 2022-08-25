@@ -67,7 +67,8 @@ class DistralBasePolicies(BasePolicy):
             "net_arch": net_arch,
             "activation_fn": self.activation_fn,
             "normalize_images": normalize_images,
-            "features_extractor_class": features_extractor_class
+            "features_extractor_class": features_extractor_class,
+            "features_extractor_kwargs": features_extractor_kwargs
         }
         self.actors, self.critics = None, None
         self.pi0, self.pi0_optim = None, None

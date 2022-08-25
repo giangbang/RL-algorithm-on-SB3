@@ -90,6 +90,8 @@ class DiscreteSAC(OffPolicyAlgorithm):
         # Target entropy is used when learning the entropy coefficient
         if self.target_entropy == "auto":
             # automatically set target entropy if needed
+            # This roughly equivalent to epsilon-greedy policy
+            # with 20% exploration
             self.target_entropy = np.log(self.env.action_space.n) / 5
         else:
             # Force conversion
