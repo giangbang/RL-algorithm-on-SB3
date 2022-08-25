@@ -162,6 +162,9 @@ class DiscreteActor(BasePolicy):
     def _get_distribution_from_logit(self, logits: th.Tensor) -> Distribution:
         return self.policy._get_distribution_from_logit(logits)
 
+    def get_distribution(self, obs: th.Tensor) -> Distribution:
+        return self.policy.get_distribution(obs)
+
 
 class DiscreteTwinDelayedDoubleQNetworks(BasePolicy):
     """

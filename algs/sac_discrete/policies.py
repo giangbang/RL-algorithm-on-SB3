@@ -5,23 +5,27 @@ import torch as th
 from torch import nn
 from common.policies import DiscreteTwinDelayedDoubleQNetworks, DiscreteActor
 from stable_baselines3.common.type_aliases import Schedule
+from stable_baselines3.common.base_class import BasePolicy
+from stable_baselines3.common.torch_layers import (
+    BaseFeaturesExtractor,
+    FlattenExtractor,
+)
 
 
 class DiscreteSACPolicy(BasePolicy):
     def __init__(
-        self,
-        observation_space: gym.spaces.Space,
-        action_space: gym.spaces.Space,
-        lr_schedule: Schedule,
-        net_arch: Optional[Union[List[int], Dict[str, List[int]]]] = None,
-        activation_fn: Type[nn.Module] = nn.ReLU,
-        features_extractor_class: Type[BaseFeaturesExtractor] = FlattenExtractor,
-        features_extractor_kwargs: Optional[Dict[str, Any]] = None,
-        normalize_images: bool = True,
-        optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
-        optimizer_kwargs: Optional[Dict[str, Any]] = None,
+            self,
+            observation_space: gym.spaces.Space,
+            action_space: gym.spaces.Space,
+            lr_schedule: Schedule,
+            net_arch: Optional[Union[List[int], Dict[str, List[int]]]] = None,
+            activation_fn: Type[nn.Module] = nn.ReLU,
+            features_extractor_class: Type[BaseFeaturesExtractor] = FlattenExtractor,
+            features_extractor_kwargs: Optional[Dict[str, Any]] = None,
+            normalize_images: bool = True,
+            optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
+            optimizer_kwargs: Optional[Dict[str, Any]] = None,
     ):
-
         super().__init__(
             observation_space,
             action_space,
@@ -42,6 +46,8 @@ class DiscreteSACPolicy(BasePolicy):
             "net_arch": net_arch,
             "activation_fn": self.activation_fn,
             "normalize_images": normalize_images,
+            "features_extractor_class": features_extractor_class,
+            "features_extractor_kwargs": features_extractor_kwargs,
         }
 
         self.actor, self.critic = None, None
@@ -61,17 +67,17 @@ class DiscreteSACPolicy(BasePolicy):
         )
 
     def make_actor(
-        self, features_extractor: Optional[BaseFeaturesExtractor] = None
+            self, features_extractor: Optional[BaseFeaturesExtractor] = None
     ) -> DiscreteActor:
         return DiscreteActor(**self.net_args).to(self.device)
 
     def make_critic(
-        self, features_extractor: Optional[BaseFeaturesExtractor] = None
+            self, features_extractor: Optional[BaseFeaturesExtractor] = None
     ) -> DiscreteTwinDelayedDoubleQNetworks:
         return DiscreteTwinDelayedDoubleQNetworks(**self.net_args).to(self.device)
 
     def _predict(
-        self, observation: th.Tensor, deterministic: bool = False
+            self, observation: th.Tensor, deterministic: bool = False
     ) -> th.Tensor:
         return self.actor._predict(observation, deterministic)
 

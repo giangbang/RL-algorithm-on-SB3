@@ -119,6 +119,8 @@ class DiscreteDistral(BaseDistral):
 
         critic_losses, actor_losses = [], []
 
+        gradient_steps *= self.n_envs
+
         for gradient_step in range(gradient_steps):
             # Sample replay buffer
             replay_data = self.replay_buffer.sample(

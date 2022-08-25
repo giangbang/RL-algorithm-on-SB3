@@ -211,7 +211,7 @@ class DiscreteSAC(OffPolicyAlgorithm):
             # Compute actor loss
             probs, entropy = self.actor.action_log_prob(replay_data.observations)
 
-            q_values_pi = self.critic.critic_online(replay_data.observations)
+            q_values_pi = self.critic.critic(replay_data.observations)
             min_q_values = th.minimum(*q_values_pi)
             actor_loss = (probs * min_q_values).sum(
                 dim=1, keepdims=True
