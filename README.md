@@ -1,4 +1,4 @@
-# SAC Discrete Stable-baselines3
+# RL algorithms on Stable-baselines3
 
 Set of implementations of RL algorithms, using Stable-baselines3, 
 
