@@ -7,18 +7,25 @@ import torch as th
 from stable_baselines3.common.buffers import ReplayBuffer
 from stable_baselines3.common.vec_env import VecNormalize
 
+
 class MultitaskReplayBufferSamples(NamedTuple):
     observations: th.Tensor
     actions: th.Tensor
     next_observations: th.Tensor
     dones: th.Tensor
     rewards: th.Tensor
-    env_indices: th.Tensor
+    env_indices: np.ndarray
+
 
 class MultitaskReplayBuffer(ReplayBuffer):
-    def _get_samples(self, batch_inds: np.ndarray, 
-        env: Optional[VecNormalize] = None
-    ) -> MultitaskReplayBufferSamples:
+    """
+    Multitask replay buffer, only sample from one environment at each batch samples
+    return the environment index along with transitions from which they are sampled
+    """
+
+    def _get_samples(self, batch_inds: np.ndarray,
+                     env: Optional[VecNormalize] = None
+                     ) -> MultitaskReplayBufferSamples:
         # Sample randomly the env idx
         env_indices = np.random.randint(0, high=self.n_envs, size=(1,))
 

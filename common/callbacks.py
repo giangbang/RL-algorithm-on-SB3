@@ -2,7 +2,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 import numpy as np
 import copy
 
-class LogRewardSeperateEnvs(BaseCallback):
+class LogReturnSeperateEnvs(BaseCallback):
     def __init__(self, verbose=0):
         super().__init__(verbose)
         self.total_rewards = None
@@ -20,6 +20,6 @@ class LogRewardSeperateEnvs(BaseCallback):
         for idx, done in enumerate(dones):
             if done:
                 self.cnt_episode[idx] += 1
-                self.logger.record_mean(f'Task reward {idx}', self.total_rewards[indx])
+                self.logger.record(f'Task reward {idx}', self.total_rewards[indx])
                 self.total_rewards[idx] = 0
         return True

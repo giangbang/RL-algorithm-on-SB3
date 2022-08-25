@@ -1,5 +1,4 @@
 import gym
-import numpy as np  
 
 from algs.sac_discrete import DiscreteSAC
 from parse_args import parse_args

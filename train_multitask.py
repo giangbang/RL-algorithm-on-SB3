@@ -6,7 +6,7 @@ from parse_args import parse_args
 from stable_baselines3.common.logger import configure
 from get_multi_envs import envs_name
 from stable_baselines3.common.vec_env import DummyVecEnv
-from algs.distral.callbacks import LogRewardSeperateEnvs
+from common.callbacks import LogReturnSeperateEnvs
 
 args = parse_args()
 # test envs
@@ -28,7 +28,7 @@ model = DiscreteDistral("MlpPolicy",
 new_logger = configure('./', ["stdout", "csv"])
 model.set_logger(new_logger)
 
-callback = LogRewardSeperateEnvs()
+callback_return = LogReturnSeperateEnvs()
 
 model.learn(total_timesteps=args.total_timesteps, 
-    log_interval=10, callback=callback)
+    log_interval=10, callback=callback_return)

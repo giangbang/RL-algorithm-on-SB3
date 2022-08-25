@@ -227,7 +227,7 @@ class DiscreteSAC(OffPolicyAlgorithm):
             # Update target networks
             if gradient_step % self.target_update_interval == 0:
                 polyak_update(
-                    self.critic.critic_online_parameters(),
+                    self.critic.critic_parameters(),
                     self.critic.critic_target_parameters(),
                     self.tau,
                 )

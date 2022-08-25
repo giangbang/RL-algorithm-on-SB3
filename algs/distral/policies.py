@@ -3,77 +3,15 @@ from typing import Any, Dict, List, Optional, Type, Union
 import gym
 import torch as th
 from torch import nn
-from algs.sac_discrete.policies import DiscreteActor, TwinDelayedQNetworks
+from common.policies import DiscreteActor, DiscreteTwinDelayedDoubleQNetworks, ContinuousTwinDelayedDoubleQNetworks
 from stable_baselines3.sac.policies import Actor as ContinuousActor
-from stable_baselines3.common.policies import BasePolicy, ContinuousCritic, BaseModel
+from stable_baselines3.common.policies import BasePolicy
 from stable_baselines3.common.type_aliases import Schedule
 
 from stable_baselines3.common.torch_layers import (
     BaseFeaturesExtractor,
     FlattenExtractor,
 )
-
-class TwinDelayedContinuousQNetworks(BasePolicy):
-    """
-    Twin delayed continuous Q networks for continuous action space
-    """
-    def __init__(
-        self,
-        observation_space: gym.spaces.Space,
-        action_space: gym.spaces.Space,
-        net_arch: List[int],
-        features_extractor: nn.Module,
-        features_dim: int,
-        activation_fn: Type[nn.Module] = nn.ReLU,
-        normalize_images: bool = True,
-    ):
-        super().__init__(
-            observation_space,
-            action_space,
-            features_extractor=features_extractor,
-            normalize_images=normalize_images,
-        )
-        
-        self.net_arch = net_arch
-        self.features_dim = features_dim
-        self.activation_fn = activation_fn
-        
-        self.net_args = {
-            "observation_space": self.observation_space,
-            "action_space": self.action_space,
-            "net_arch": net_arch,
-            "activation_fn": self.activation_fn,
-            "normalize_images": normalize_images,
-        }
-        self.critic, self.critic_target = None, None
-    
-    def critic_target_parameters(self):
-        return self.critic_target.parameters()
-        
-    def critic_online_parameters(self):
-        return self.critic.parameters()
-    
-    def _build(self) -> None:
-        self.critic = self.make_critic()
-        self.critic_target = self.make_critic()
-        self.critic_target.load_state_dict(self.critic.state_dict())
-
-        # Target networks should always be in eval mode
-        self.critic_target.set_training_mode(False)
-
-    
-    def make_critic(self, features_extractor: Optional[BaseFeaturesExtractor] = None) -> ContinuousCritic:
-        critic_kwargs = self._update_features_extractor(self.net_args, features_extractor)
-        return ContinuousCritic(**critic_kwargs).to(self.device)
-
-    def forward(self, obs: th.Tensor) -> th.Tensor:
-        """
-        Predict the q-values.
-
-        :param obs: Observation
-        :return: The estimated Q-Value for each action.
-        """
-        return self.critic(obs)
 
 import inspect
 def filter_dict(dict_to_filter, thing_with_kwargs):
@@ -166,8 +104,6 @@ class DistralBasePolicies(BasePolicy):
     def _build_list_module(self, module_cls: BasePolicy, 
             args: Optional[Dict[str, Any]], n_module: int,
             features_extractor: Optional[BaseFeaturesExtractor] = None):
-        args = self._update_features_extractor(args, features_extractor)
-        args = filter_dict(args, module_cls)
         return [module_cls(**args) for _ in range(n_module)]
         
     def _build_list_optimizer(self, optimizer_class: Type[th.optim.Optimizer],
@@ -197,9 +133,9 @@ class DistralBasePolicies(BasePolicy):
 class DiscreteDistralPolicy(DistralBasePolicies):
     def _build_actor_critic(self):
         self.actors = self._build_list_module(DiscreteActor, self.net_args, self.n_envs)
-        self.critics = self._build_list_module(TwinDelayedQNetworks, self.net_args, self.n_envs)
+        self.critics = self._build_list_module(DiscreteTwinDelayedDoubleQNetworks, self.net_args, self.n_envs)
         self.pi0 = DiscreteActor(**self.net_args)
-        self.h0  = TwinDelayedQNetworks(**self.net_args)
+        self.h0  = DiscreteTwinDelayedDoubleQNetworks(**self.net_args)
         
     def _predict(self, observation: th.Tensor, deterministic: bool = False) -> th.Tensor:
         actions = []
@@ -218,5 +154,5 @@ class DiscreteDistralPolicy(DistralBasePolicies):
 class ContinuousDistral(DistralBasePolicies):
     def _build_actor_critic(self):
         self.actors = self._build_list_module(ContinuousActor, self.net_args, self.n_envs)
-        self.critics = self._build_list_module(TwinDelayedContinuousQNetworks, self.net_args, self.n_envs)
+        self.critics = self._build_list_module(ContinuousTwinDelayedDoubleQNetworks, self.net_args, self.n_envs)
         self.pi0 = ContinuousActor(**self.net_args)

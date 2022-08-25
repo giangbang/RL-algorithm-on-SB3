@@ -7,7 +7,7 @@ from torch.nn import functional as F
 
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from .policies import DiscreteDistralPolicy, DistralBasePolicies
-from .MultitaskReplayBuffer import MultitaskReplayBuffer
+from common.buffers import MultitaskReplayBuffer
 from stable_baselines3.common.utils import polyak_update
 from stable_baselines3.common.type_aliases import GymEnv, Schedule
 from stable_baselines3.common.buffers import ReplayBuffer
@@ -22,33 +22,33 @@ class BaseDistral(OffPolicyAlgorithm):
     we use an actor critic architecture to avoid calculating the softmax 
     of the Q function, which can be unstable when Q values are large
     """
-    
+
     def __init__(
-        self,
-        policy: Union[str, Type[DistralBasePolicies]],
-        env: Union[GymEnv, str],
-        learning_rate: Union[float, Schedule] = 3e-4,
-        buffer_size: int = 1_000_000,  # 1e6
-        learning_starts: int = 100,
-        batch_size: int = 256,
-        tau: float = 0.005,
-        gamma: float = 0.99,
-        alpha: float = 0.5, # Hyper params of Distral
-        beta: float  = 0.5, # Hyper params of Distral
-        train_freq: Union[int, Tuple[int, str]] = 1,
-        gradient_steps: int = 1,
-        replay_buffer_class: Optional[ReplayBuffer] = MultitaskReplayBuffer,
-        replay_buffer_kwargs: Optional[Dict[str, Any]] = None,
-        optimize_memory_usage: bool = False,
-        target_update_interval: int = 1,
-        tensorboard_log: Optional[str] = None,
-        create_eval_env: bool = False,
-        policy_kwargs: Optional[Dict[str, Any]] = None,
-        verbose: int = 0,
-        seed: Optional[int] = None,
-        device: Union[th.device, str] = "auto",
-        supported_action_spaces: gym.spaces= None,
-        _init_setup_model: bool = True,
+            self,
+            policy: Union[str, Type[DistralBasePolicies]],
+            env: Union[GymEnv, str],
+            learning_rate: Union[float, Schedule] = 3e-4,
+            buffer_size: int = 1_000_000,  # 1e6
+            learning_starts: int = 100,
+            batch_size: int = 256,
+            tau: float = 0.005,
+            gamma: float = 0.99,
+            alpha: float = 0.5,  # Hyper params of Distral
+            beta: float = 5,  # Hyper params of Distral
+            train_freq: Union[int, Tuple[int, str]] = 1,
+            gradient_steps: int = 1,
+            replay_buffer_class: Optional[MultitaskReplayBuffer] = MultitaskReplayBuffer,
+            replay_buffer_kwargs: Optional[Dict[str, Any]] = None,
+            optimize_memory_usage: bool = False,
+            target_update_interval: int = 1,
+            tensorboard_log: Optional[str] = None,
+            create_eval_env: bool = False,
+            policy_kwargs: Optional[Dict[str, Any]] = None,
+            verbose: int = 0,
+            seed: Optional[int] = None,
+            device: Union[th.device, str] = "auto",
+            supported_action_spaces: gym.spaces = None,
+            _init_setup_model: bool = True,
     ):
         distral_args = {"alpha": alpha, "beta": beta}
         if policy_kwargs is None:
@@ -85,7 +85,8 @@ class BaseDistral(OffPolicyAlgorithm):
 
         self.alpha = alpha
         self.beta = beta
-        
+        self.target_update_interval = target_update_interval
+
         if _init_setup_model:
             self._setup_model()
 
@@ -95,7 +96,6 @@ class BaseDistral(OffPolicyAlgorithm):
 
 
 class DiscreteDistral(BaseDistral):
-
     policy_aliases: Dict[str, Type[BasePolicy]] = {
         "MlpPolicy": DiscreteDistralPolicy,
     }
@@ -117,7 +117,7 @@ class DiscreteDistral(BaseDistral):
 
         # Update learning rate according to lr schedule
         self._update_learning_rate(optimizers)
-        
+
         critic_losses, actor_losses = [], []
 
         for gradient_step in range(gradient_steps):
@@ -129,11 +129,11 @@ class DiscreteDistral(BaseDistral):
             # Update pi0
             probs_pi0, _ = self.policy.pi0.action_log_prob(replay_data.observations, False)
             with th.no_grad():
-                probs_pi, _  = self.actor.action_log_prob(replay_data.env_indices, 
-                    replay_data.observations, False)
+                probs_pi, _ = self.actor.action_log_prob(replay_data.env_indices,
+                                                         replay_data.observations, False)
 
             log_probs_pi0 = th.log(probs_pi0 + self.epsilon_in_log)
-            cross_entropy = (log_probs_pi0*probs_pi).sum(dim=1, keepdims=True)
+            cross_entropy = (log_probs_pi0 * probs_pi).sum(dim=1, keepdims=True)
             cross_entropy = self.alpha / self.beta * cross_entropy
             pi0_loss = -cross_entropy.mean()
 
@@ -144,33 +144,33 @@ class DiscreteDistral(BaseDistral):
             # Update value function of tasks
             with th.no_grad():
                 # Compute the next Q values: min over all critics targets
-                next_q_values = self.critic_target_task(replay_data.env_indices, replay_data.next_observations)
+                next_q_values = self.critic.critic_target_task(replay_data.env_indices, replay_data.next_observations)
                 next_q_values = th.minimum(*next_q_values)
-                
-                next_probs_pi, next_entropy = self.action_log_prob(
+
+                next_probs_pi, next_entropy = self.actor.action_log_prob(
                     replay_data.env_indices, replay_data.next_observations
                 )
-                
+
                 next_prob_pi0, _ = self.policy.pi0.action_log_prob(replay_data.next_observations, False)
                 next_log_prob_pi0 = th.log(next_prob_pi0 + self.epsilon_in_log)
                 next_cross_ent = (next_log_prob_pi0 * next_probs_pi).sum(dim=1, keepdims=True)
                 next_q_values = (
-                    (next_q_values*next_probs_pi).sum(dim=1, keepdims=True) +\
-                    self.alpha/self.beta*next_cross_ent + \
-                    1/self.beta*next_entropy.reshape(-1, 1)
+                        (next_q_values * next_probs_pi).sum(dim=1, keepdims=True) +
+                        self.alpha / self.beta * next_cross_ent +
+                        1 / self.beta * next_entropy.reshape(-1, 1)
                 )
-                
+
                 target_q_values = (
-                    replay_data.rewards 
-                    + (1 - replay_data.dones) * self.gamma * next_q_values
+                        replay_data.rewards
+                        + (1 - replay_data.dones) * self.gamma * next_q_values
                 )
-                
+
             current_q_values = self.critic.critic_task(replay_data.env_indices, replay_data.observations)
             current_q_values = [
                 current_q.gather(1, replay_data.actions)
                 for current_q in current_q_values
             ]
-            
+
             # Compute critic loss
             critic_loss = 0.5 * sum(
                 F.mse_loss(current_q, target_q_values) for current_q in current_q_values
@@ -187,9 +187,11 @@ class DiscreteDistral(BaseDistral):
 
             q_values_pi = self.critic.critic_task(replay_data.env_indices, replay_data.observations)
             min_q_values = th.minimum(*q_values_pi)
+
+            # entropy coefficient is 1, since we only want to project the softmax of Q to another actor
             actor_loss = (probs * min_q_values).sum(
                 dim=1, keepdims=True
-            ) + 1 * entropy.reshape(-1, 1) # entropy coeficient is 1, since we only want to project the softmax of Q to an other actor
+            ) + 1 * entropy.reshape(-1, 1)
             actor_loss = -actor_loss.mean()
 
             # Optimize the actor
@@ -210,4 +212,3 @@ class DiscreteDistral(BaseDistral):
         self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
         self.logger.record("train/actor_loss", np.mean(actor_losses))
         self.logger.record("train/critic_loss", np.mean(critic_losses))
-       
