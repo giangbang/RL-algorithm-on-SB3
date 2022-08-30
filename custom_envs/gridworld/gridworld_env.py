@@ -362,3 +362,46 @@ class GridworldEnv(gym.Env):
 
             shortest_length += 1
         return -1
+
+from gym import GoalEnv
+
+class MultiGoalGridWorld(GoalEnv):
+    """
+    Wrapper class for Gridworld environment, with multi-goal settup
+    this class provides compatibility with HER 
+    """
+    def __init__(self, plan):
+        super().__init__()
+        self.env = GridworldEnv(plan)
+        self.action_space = self.env.action_space
+        self.observation_space = spaces.Dict(
+            {
+                "observation": copy.deepcopy(self.env.observation_space),
+                "achieved_goal": copy.deepcopy(self.env.observation_space),
+                "desired_goal": copy.deepcopy(self.env.observation_space),
+            }
+        )
+        
+    def seed(self, seed: int) -> None:
+        self.env.seed(seed)
+    
+    def _get_obs(self, current_state, desired_goal):
+        return OrderedDict(
+            [
+                ("observation", copy.deepcopy(current_state),
+                ("achieved_goal", copy.deepcopy(current_state),
+                ("desired_goal", copy.deepcopy(desired_goal),
+            ]
+        )
+    
+    def step(self, action: int):
+        next_state, reward, done, info = self.env.step(action)
+        desired_goal = self.env.get_state(self.env.agent_target_state)
+        obs = self._get_obs(next_state, desired_goal)
+        return obs, reward, done, info
+        
+    def render(self, *args, **kwargs):
+        return self.env.render(*args, **kwargs)
+    
+    def reset(self):
+        return self.env.reset()

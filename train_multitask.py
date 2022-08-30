@@ -10,7 +10,7 @@ from common.callbacks import LogReturnSeparateEnvs
 
 args = parse_args()
 
-envs = envs_name['grid-tworoom']
+envs = envs_name[args.env_name]
 envs = DummyVecEnv(envs)
 
 model = DiscreteDistral("MlpPolicy",
