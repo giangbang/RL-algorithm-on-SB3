@@ -9,6 +9,9 @@ from gym import spaces
 import numpy as np
 import matplotlib.pyplot as plt
 from gym.utils import seeding
+from collections import OrderedDict
+from numpy.random import randint
+
 
 EMPTY = BLACK = 0
 WALL = GRAY = 1
@@ -85,6 +88,20 @@ class GridworldEnv(gym.Env):
 
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
+    
+
+    def generate_task(self):
+        n_trial = 1000
+        while n_trial >= 0:
+            state = randint(0, self.grid_map_shape[0]), randint(0, self.grid_map_shape[1])
+            if self.start_grid_map[state] != WALL:
+                self.start_grid_map[self.agent_target_state] = EMPTY
+                self.agent_target_state = state
+                self.start_grid_map[self.agent_target_state] = TARGET
+                return state
+            n_trial -= 1
+        print('Cannot find a valid starting position!')
+        return None
 
     def get_state(self, coordinates, action, reward):
 
@@ -388,15 +405,15 @@ class MultiGoalGridWorld(GoalEnv):
     def _get_obs(self, current_state, desired_goal):
         return OrderedDict(
             [
-                ("observation", copy.deepcopy(current_state),
-                ("achieved_goal", copy.deepcopy(current_state),
-                ("desired_goal", copy.deepcopy(desired_goal),
+                ("observation", copy.deepcopy(current_state)),
+                ("achieved_goal", copy.deepcopy(current_state)),
+                ("desired_goal", copy.deepcopy(desired_goal)),
             ]
         )
     
     def step(self, action: int):
         next_state, reward, done, info = self.env.step(action)
-        desired_goal = self.env.get_state(self.env.agent_target_state)
+        desired_goal = self.env.get_state(self.env.agent_target_state, action, reward)
         obs = self._get_obs(next_state, desired_goal)
         return obs, reward, done, info
         
@@ -404,8 +421,10 @@ class MultiGoalGridWorld(GoalEnv):
         return self.env.render(*args, **kwargs)
     
     def reset(self):
-        return self.env.reset()
+        state = self.env.reset()
+        
+        return self._get_obs(state, self.env.get_state(self.env.agent_target_state, None, None))
         
     def compute_reward(self, achieved_goal, desired_goal, _info):
-        if achieved_goal == desired_goal: return self.env.get_reward_on_reaching_goal()
-        else return -self.env.penalty_step
+        if np.abs(achieved_goal - desired_goal).sum() < 1e-8: return self.env.get_reward_on_reaching_goal()
+        else: return -self.env.penalty_step
