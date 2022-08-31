@@ -32,7 +32,7 @@ class GridworldEnv(gym.Env):
     metadata = {'render.modes': ['human', 'rgb_array']}
     num_env = 0
 
-    def __init__(self, plan):
+    def __init__(self, plan, generate_goal=False, random_start=False):
         super().__init__()
         self.plan = plan
 
@@ -55,7 +55,15 @@ class GridworldEnv(gym.Env):
 
         # agent state: start, target, current state
         self.agent_start_state, self.agent_target_state = self._get_agent_start_target_state()
+        if random_start:
+            self.start_grid_map[self.agent_start_state] = EMPTY
+            self.agent_start_state = None
+        
         self.agent_state = copy.deepcopy(self.agent_start_state)
+        
+        if generate_goal:
+            self.generate_task()
+        
         if self.agent_state is None:
             self.agent_state = self._place_agent()
 
@@ -76,6 +84,7 @@ class GridworldEnv(gym.Env):
 
         self.penalty_step = 0.1
         self.penalty_wall = 0.5
+        
 
         self.optimal_reward = None
         # calculate the length of shortest path from start to goal
@@ -94,6 +103,7 @@ class GridworldEnv(gym.Env):
         n_trial = 1000
         while n_trial >= 0:
             state = randint(0, self.grid_map_shape[0]), randint(0, self.grid_map_shape[1])
+            
             if self.start_grid_map[state] != WALL:
                 self.start_grid_map[self.agent_target_state] = EMPTY
                 self.agent_target_state = state
@@ -198,6 +208,7 @@ class GridworldEnv(gym.Env):
             # self.shortest_path_length = self._find_shortest_path_length_start_goal()
 
         self.current_grid_map = copy.deepcopy(self.start_grid_map)
+        self.current_grid_map[self.agent_state] = AGENT
         self.episode_total_reward = 0.0
         self.time = 0
         return self.get_state(self.agent_state, 0.0, 0.0)
