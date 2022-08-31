@@ -32,7 +32,7 @@ class GridworldEnv(gym.Env):
     metadata = {'render.modes': ['human', 'rgb_array']}
     num_env = 0
 
-    def __init__(self, plan, generate_goal=False, random_start=False):
+    def __init__(self, plan, generate_goal=True, random_start=True):
         super().__init__()
         self.plan = plan
 
