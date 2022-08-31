@@ -405,3 +405,7 @@ class MultiGoalGridWorld(GoalEnv):
     
     def reset(self):
         return self.env.reset()
+        
+    def compute_reward(self, achieved_goal, desired_goal, _info):
+        if achieved_goal == desired_goal: return self.env.get_reward_on_reaching_goal()
+        else return -self.env.penalty_step
